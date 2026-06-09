@@ -10,6 +10,13 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - salon-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -24,6 +31,13 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    networks:
+      - salon-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
@@ -37,8 +51,19 @@ services:
       - "9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - salon-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   redis_data:
   minio_data:
   elasticsearch_data:
+
+networks:
+  salon-network:
+    driver: bridge
