@@ -13,14 +13,25 @@ public class SalonflowApplication {
 
 	public static void main(String[] args) {
 		loadEnv();
-		System.out.println("NODE_ENV=" + System.getenv("NODE_ENV"));
-		System.out.println("SPRING_PROFILES_ACTIVE=" + System.getenv("SPRING_PROFILES_ACTIVE"));
+		String nodeEnv = System.getenv("NODE_ENV");
+		if (nodeEnv == null || nodeEnv.isBlank()) {
+			nodeEnv = System.getProperty("NODE_ENV");
+		}
+		String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+		if (activeProfile == null || activeProfile.isBlank()) {
+			activeProfile = System.getProperty("SPRING_PROFILES_ACTIVE");
+		}
+		System.out.println("NODE_ENV=" + nodeEnv);
+		System.out.println("SPRING_PROFILES_ACTIVE=" + activeProfile);
 		SpringApplication.run(SalonflowApplication.class, args);
 	}
 
 	private static void loadEnv() {
 		loadEnvFile(Paths.get(".env"));
 		String profile = System.getenv("SPRING_PROFILES_ACTIVE");
+		if (profile != null) {
+			profile = profile.trim();
+		}
 		if (profile != null && !profile.isBlank()) {
 			loadEnvFile(Paths.get(".env." + profile));
 		}
@@ -44,7 +55,9 @@ public class SalonflowApplication {
 					if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
 						value = value.substring(1, value.length() - 1);
 					}
-					if (System.getenv(key) == null && System.getProperty(key) == null) {
+					// Do not overwrite real environment variables (OS-level),
+					// but allow later-loaded files (profile) to override earlier ones.
+					if (System.getenv(key) == null) {
 						System.setProperty(key, value);
 					}
 				}
