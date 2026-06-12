@@ -40,6 +40,7 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private UserStatus status;
 
+    @Builder.Default
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "user_roles",
