@@ -24,6 +24,9 @@ public class JwtServiceImpl
     @Value("${jwt.access-token-expiration}")
     private Long jwtExpiration;
 
+    @Value("${jwt.reset-password-expiration}")
+    private Long resetPasswordExpiration;
+
     @Override
     public String generateToken(
             UserDetails userDetails
@@ -71,6 +74,36 @@ public class JwtServiceImpl
         ) && !isTokenExpired(token);
     }
 
+    @Override
+    public String generateResetPasswordToken(
+        String email
+    ) {
+        return Jwts.builder()
+            .subject(email)
+            .claim(
+                    "type",
+                    "RESET_PASSWORD"
+            )
+            .issuedAt(new Date())
+            .expiration(
+                    new Date(
+                            System.currentTimeMillis()
+                                    + resetPasswordExpiration
+                    )
+            )
+            .signWith(getSigningKey())
+            .compact();
+    }
+
+    @Override
+        public String extractEmailFromResetToken(
+                String token
+        ) {
+        return extractClaim(
+                token,
+                Claims::getSubject
+        );
+        }
     private boolean isTokenExpired(
             String token
     ) {
@@ -117,4 +150,11 @@ public class JwtServiceImpl
                 secret.getBytes()
         );
     }
+
+    @Override
+    public boolean isResetTokenValid(String token) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'isResetTokenValid'");
+    }
+    
 }

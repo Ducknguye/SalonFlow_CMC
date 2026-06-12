@@ -1,7 +1,7 @@
 package com.example.salonflow.services.impl;
 
-
 import com.example.salonflow.dto.auth.*;
+import com.example.salonflow.dto.common.MessageResponse;
 import com.example.salonflow.entity.RefreshToken;
 import com.example.salonflow.entity.Role;
 import com.example.salonflow.entity.User;
@@ -9,9 +9,15 @@ import com.example.salonflow.entity.enums.UserStatus;
 import com.example.salonflow.repository.RoleRepository;
 import com.example.salonflow.repository.UserRepository;
 import com.example.salonflow.services.service.AuthenticationService;
+import com.example.salonflow.services.service.EmailService;
 import com.example.salonflow.services.service.JwtService;
+import com.example.salonflow.services.service.OtpService;
 import com.example.salonflow.services.service.RefreshTokenService;
+import com.example.salonflow.util.OtpGenerator;
+
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
@@ -25,204 +31,268 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class AuthenticationServiceImpl
-        implements AuthenticationService {
+                implements AuthenticationService {
 
-    private static final String DEFAULT_ROLE = "CUSTOMER";
+        private static final String DEFAULT_ROLE = "CUSTOMER";
 
-    private final AuthenticationManager authenticationManager;
+        private final AuthenticationManager authenticationManager;
 
-    private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
+        private final UserRepository userRepository;
+        private final RoleRepository roleRepository;
 
-    private final PasswordEncoder passwordEncoder;
+        private final PasswordEncoder passwordEncoder;
 
-    private final JwtService jwtService;
-    private final RefreshTokenService refreshTokenService;
+        private final JwtService jwtService;
+        private final RefreshTokenService refreshTokenService;
 
-    @Override
-    public AuthResponse register(
-            RegisterRequest request
-    ) {
+        private final EmailService emailService;
+        private final OtpService otpService;
+        private final OtpGenerator otpGenerator;
 
-        validateRegisterRequest(request);
+        @Value("${frontend.url}")
+        private String frontendUrl;
 
-        Role customerRole =
-                roleRepository.findByName(DEFAULT_ROLE)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Role CUSTOMER not found"
-                                ));
+        @Override
+        public RegisterResponse register(
+                        RegisterRequest request) {
 
-        User user = User.builder()
-                .username(request.getUsername())
-                .email(request.getEmail())
-                .passwordHash(
-                        passwordEncoder.encode(
-                                request.getPassword()
-                        )
-                )
-                .fullName(request.getFullName())
-                .phone(request.getPhone())
-                .status(UserStatus.ACTIVE)
-                .build();
+                validateRegisterRequest(request);
 
-        user.getRoles().add(customerRole);
+                Role customerRole = roleRepository.findByName(DEFAULT_ROLE)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Role CUSTOMER not found"));
 
-        user = userRepository.save(user);
+                User user = User.builder()
+                                .username(request.getUsername())
+                                .email(request.getEmail())
+                                .passwordHash(
+                                                passwordEncoder.encode(
+                                                                request.getPassword()))
+                                .fullName(request.getFullName())
+                                .phone(request.getPhone())
+                                .status(UserStatus.INACTIVE)
+                                .build();
 
-        return buildAuthResponse(user);
-    }
+                user.getRoles().add(customerRole);
 
-    @Override
-    public AuthResponse login(
-            LoginRequest request
-    ) {
+                user = userRepository.save(user);
 
-        try {
+                sendVerificationOtp(user.getEmail());
 
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getEmail(),
-                            request.getPassword()
-                    )
-            );
-
-        } catch (AuthenticationException e) {
-
-            throw new RuntimeException(
-                    "Email or password invalid"
-            );
+                return RegisterResponse.builder()
+                        .email(user.getEmail())
+                        .message("OTP sent to your email")
+                        .build();
         }
 
-        User user = userRepository
-                .findByEmail(request.getEmail())
-                .orElseThrow(
-                        () -> new RuntimeException(
-                                "User not found"
-                        )
-                );
+        @Override
+        public AuthResponse login(
+                        LoginRequest request) {
 
-        validateActiveUser(user);
+                try {
 
-        return buildAuthResponse(user);
-    }
+                        authenticationManager.authenticate(
+                                        new UsernamePasswordAuthenticationToken(
+                                                        request.getEmail(),
+                                                        request.getPassword()));
 
-    @Override
-    public RefreshTokenResponse refreshToken(
-            RefreshTokenRequest request
-    ) {
+                } catch (AuthenticationException e) {
 
-        RefreshToken refreshToken =
-                refreshTokenService.verifyExpiration(
-                        request.getRefreshToken()
-                );
+                        throw new RuntimeException(
+                                        "Email or password invalid");
+                }
 
-        User user = refreshToken.getUser();
+                User user = userRepository
+                                .findByEmail(request.getEmail())
+                                .orElseThrow(
+                                                () -> new RuntimeException(
+                                                                "User not found"));
 
-        validateActiveUser(user);
+                validateActiveUser(user);
 
-        UserDetails userDetails = buildUserDetails(user);
-
-        String accessToken =
-                jwtService.generateToken(userDetails);
-
-        return RefreshTokenResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken.getToken())
-                .build();
-    }
-
-    @Override
-    public void logout(Long userId) {
-
-        User user =
-                userRepository.findById(userId)
-                        .orElseThrow(
-                                () -> new RuntimeException(
-                                        "User not found"
-                                )
-                        );
-
-        refreshTokenService.deleteByUser(user);
-    }
-
-    private void validateRegisterRequest(
-            RegisterRequest request
-    ) {
-
-        if(userRepository.existsByEmail(
-                request.getEmail()
-        )) {
-
-            throw new RuntimeException(
-                    "Email already exists"
-            );
+                return buildAuthResponse(user);
         }
 
-        if(userRepository.existsByUsername(
-                request.getUsername()
-        )) {
+        @Override
+        public RefreshTokenResponse refreshToken(
+                        RefreshTokenRequest request) {
 
-            throw new RuntimeException(
-                    "Username already exists"
-            );
+                RefreshToken refreshToken = refreshTokenService.verifyExpiration(
+                                request.getRefreshToken());
+
+                User user = refreshToken.getUser();
+
+                validateActiveUser(user);
+
+                UserDetails userDetails = buildUserDetails(user);
+
+                String accessToken = jwtService.generateToken(userDetails);
+
+                return RefreshTokenResponse.builder()
+                                .accessToken(accessToken)
+                                .refreshToken(refreshToken.getToken())
+                                .build();
         }
-    }
 
-    private void validateActiveUser(User user) {
+        @Override
+        public void logout(Long userId) {
 
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new RuntimeException(
-                    "User account is not active"
-            );
+                User user = userRepository.findById(userId)
+                                .orElseThrow(
+                                                () -> new RuntimeException(
+                                                                "User not found"));
+
+                refreshTokenService.deleteByUser(user);
         }
-    }
 
-    private AuthResponse buildAuthResponse(
-            User user
-    ) {
+        private void validateRegisterRequest(
+                        RegisterRequest request) {
 
-        UserDetails userDetails = buildUserDetails(user);
+                if (userRepository.existsByEmail(
+                                request.getEmail())) {
 
-        String accessToken =
-                jwtService.generateToken(userDetails);
+                        throw new RuntimeException(
+                                        "Email already exists");
+                }
 
-        RefreshToken refreshToken =
-                refreshTokenService.createRefreshToken(user);
+                if (userRepository.existsByUsername(
+                                request.getUsername())) {
 
-        return AuthResponse.builder()
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .accessToken(accessToken)
-                .refreshToken(refreshToken.getToken())
-                .tokenType("Bearer")
-                .roles(
-                        user.getRoles()
-                                .stream()
-                                .map(Role::getName)
-                                .toList()
-                )
-                .build();
-    }
+                        throw new RuntimeException(
+                                        "Username already exists");
+                }
+        }
 
-    private UserDetails buildUserDetails(User user) {
+        private void validateActiveUser(User user) {
 
-        return org.springframework.security.core.userdetails.User
-                .builder()
-                .username(user.getEmail())
-                .password(user.getPasswordHash())
-                .authorities(
-                        user.getRoles()
-                                .stream()
-                                .map(role ->
-                                        new SimpleGrantedAuthority(
-                                                "ROLE_" + role.getName()
-                                        )
-                                )
-                                .toList()
-                )
-                .disabled(user.getStatus() != UserStatus.ACTIVE)
-                .build();
-    }
+                if (user.getStatus() != UserStatus.ACTIVE) {
+                        throw new RuntimeException(
+                                        "User account is not active");
+                }
+        }
+
+        private AuthResponse buildAuthResponse(
+                        User user) {
+
+                UserDetails userDetails = buildUserDetails(user);
+
+                String accessToken = jwtService.generateToken(userDetails);
+
+                RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+                return AuthResponse.builder()
+                                .userId(user.getId())
+                                .username(user.getUsername())
+                                .email(user.getEmail())
+                                .accessToken(accessToken)
+                                .refreshToken(refreshToken.getToken())
+                                .tokenType("Bearer")
+                                .roles(
+                                                user.getRoles()
+                                                                .stream()
+                                                                .map(Role::getName)
+                                                                .toList())
+                                .build();
+        }
+
+        private UserDetails buildUserDetails(User user) {
+
+                return org.springframework.security.core.userdetails.User
+                                .builder()
+                                .username(user.getEmail())
+                                .password(user.getPasswordHash())
+                                .authorities(
+                                                user.getRoles()
+                                                                .stream()
+                                                                .map(role -> new SimpleGrantedAuthority(
+                                                                                "ROLE_" + role.getName()))
+                                                                .toList())
+                                .disabled(user.getStatus() != UserStatus.ACTIVE)
+                                .build();
+        }
+
+        @Override
+        public void sendVerificationOtp(
+                        String email) {
+
+                String otp = otpGenerator.generate();
+
+                otpService.saveOtp(
+                                email,
+                                otp);
+
+                emailService.sendVerificationOtp(
+                                email,
+                                otp);
+        }
+
+        @Override
+        public MessageResponse verifyEmail(
+                        String email,
+                        String otp) {
+
+                String savedOtp = otpService.getOtp(email);
+
+                if (savedOtp == null) {
+
+                        throw new RuntimeException(
+                                        "OTP expired");
+                }
+
+                if (!savedOtp.equals(otp)) {
+
+                        throw new RuntimeException(
+                                        "Invalid OTP");
+                }
+
+                User user = userRepository.findByEmail(email)
+                                .orElseThrow();
+
+                user.setStatus(UserStatus.ACTIVE);
+
+                otpService.deleteOtp(email);
+
+                userRepository.save(user);
+                return MessageResponse.builder()
+                        .message("Email verified successfully")
+                        .build();
+        }
+
+        @Override
+        public void forgotPassword(
+                        String email) {
+
+                User user = userRepository.findByEmail(email)
+                                .orElseThrow();
+
+                String token = jwtService.generateResetPasswordToken(
+                                user.getEmail());
+
+                String link = frontendUrl
+                                + "/reset-password?token="
+                                + token;
+
+                emailService.sendResetPasswordEmail(
+                                email,
+                                link);
+        }
+
+        @Override
+        public void resetPassword(
+                        String token,
+                        String newPassword) {
+
+                String email = jwtService.extractEmailFromResetToken(
+                                token);
+
+                User user = userRepository.findByEmail(email)
+                                .orElseThrow();
+
+                user.setPasswordHash(
+                                passwordEncoder.encode(
+                                                newPassword));
+
+                userRepository.save(user);
+        }
+
 }

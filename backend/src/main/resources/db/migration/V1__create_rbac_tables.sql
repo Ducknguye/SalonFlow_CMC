@@ -29,7 +29,7 @@ phone VARCHAR(20) UNIQUE,
 
 avatar_url VARCHAR(500),
 
-status user_status NOT NULL DEFAULT 'ACTIVE',
+status user_status NOT NULL DEFAULT 'INACTIVE',
 
 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
