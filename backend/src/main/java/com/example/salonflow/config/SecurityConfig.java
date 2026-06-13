@@ -2,6 +2,8 @@ package com.example.salonflow.config;
 
 import com.example.salonflow.security.CustomUserDetailsService;
 import com.example.salonflow.security.JwtAuthenticationFilter;
+import com.example.salonflow.security.oauth.OAuth2AuthenticationFailureHandler;
+import com.example.salonflow.security.oauth.OAuth2AuthenticationSuccessHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.*;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,6 +25,10 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtFilter;
 
     private final CustomUserDetailsService userDetailsService;
+
+    private final OAuth2AuthenticationSuccessHandler oauth2SuccessHandler;
+
+    private final OAuth2AuthenticationFailureHandler oauth2FailureHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -60,7 +66,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
+                                SessionCreationPolicy.IF_REQUIRED
                         )
                 )
                 .authorizeHttpRequests(auth ->
@@ -68,6 +74,11 @@ public class SecurityConfig {
 
                                 .requestMatchers(
                                         "/api/v1/auth/**"
+                                ).permitAll()
+
+                                .requestMatchers(
+                                        "/oauth2/**",
+                                        "/login/oauth2/**"
                                 ).permitAll()
 
                                 .requestMatchers(
@@ -80,6 +91,11 @@ public class SecurityConfig {
                 )
                 .authenticationProvider(
                         authenticationProvider()
+                )
+                .oauth2Login(oauth2 ->
+                        oauth2
+                                .successHandler(oauth2SuccessHandler)
+                                .failureHandler(oauth2FailureHandler)
                 )
                 .addFilterBefore(
                         jwtFilter,

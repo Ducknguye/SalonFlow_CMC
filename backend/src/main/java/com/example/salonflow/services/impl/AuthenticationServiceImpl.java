@@ -2,12 +2,15 @@ package com.example.salonflow.services.impl;
 
 
 import com.example.salonflow.dto.auth.*;
+import com.example.salonflow.entity.OAuthAccount;
 import com.example.salonflow.entity.RefreshToken;
 import com.example.salonflow.entity.Role;
 import com.example.salonflow.entity.User;
 import com.example.salonflow.entity.enums.UserStatus;
+import com.example.salonflow.repository.OAuthAccountRepository;
 import com.example.salonflow.repository.RoleRepository;
 import com.example.salonflow.repository.UserRepository;
+import com.example.salonflow.security.oauth.OAuth2UserInfo;
 import com.example.salonflow.services.service.AuthenticationService;
 import com.example.salonflow.services.service.JwtService;
 import com.example.salonflow.services.service.RefreshTokenService;
@@ -17,9 +20,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +38,7 @@ public class AuthenticationServiceImpl
     private final AuthenticationManager authenticationManager;
 
     private final UserRepository userRepository;
+    private final OAuthAccountRepository oauthAccountRepository;
     private final RoleRepository roleRepository;
 
     private final PasswordEncoder passwordEncoder;
@@ -69,6 +76,30 @@ public class AuthenticationServiceImpl
         user.getRoles().add(customerRole);
 
         user = userRepository.save(user);
+
+        return buildAuthResponse(user);
+    }
+
+    @Override
+    public AuthResponse loginWithOAuth2(
+            String registrationId,
+            OAuth2User oauth2User
+    ) {
+
+        OAuth2UserInfo userInfo =
+                OAuth2UserInfo.from(registrationId, oauth2User);
+
+        validateOAuth2UserInfo(userInfo);
+
+        User user = oauthAccountRepository
+                .findByProviderAndProviderUserId(
+                        userInfo.provider(),
+                        userInfo.providerUserId()
+                )
+                .map(OAuthAccount::getUser)
+                .orElseGet(() -> createOrLinkOAuthAccount(userInfo));
+
+        validateActiveUser(user);
 
         return buildAuthResponse(user);
     }
@@ -176,6 +207,123 @@ public class AuthenticationServiceImpl
                     "User account is not active"
             );
         }
+    }
+
+    private User createOrLinkOAuthAccount(
+            OAuth2UserInfo userInfo
+    ) {
+
+        User user = userRepository
+                .findByEmail(userInfo.email())
+                .orElseGet(() -> createOAuthUser(userInfo));
+
+        OAuthAccount oauthAccount = OAuthAccount.builder()
+                .provider(userInfo.provider())
+                .providerUserId(userInfo.providerUserId())
+                .email(userInfo.email())
+                .emailVerified(userInfo.emailVerified())
+                .user(user)
+                .build();
+
+        oauthAccountRepository.save(oauthAccount);
+
+        updateUserProfileFromOAuth(user, userInfo);
+
+        return userRepository.save(user);
+    }
+
+    private User createOAuthUser(
+            OAuth2UserInfo userInfo
+    ) {
+
+        Role customerRole =
+                roleRepository.findByName(DEFAULT_ROLE)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Role CUSTOMER not found"
+                                ));
+
+        User user = User.builder()
+                .username(generateUniqueUsername(userInfo))
+                .email(userInfo.email())
+                .passwordHash(
+                        passwordEncoder.encode(
+                                UUID.randomUUID().toString()
+                        )
+                )
+                .fullName(userInfo.name())
+                .avatarUrl(userInfo.avatarUrl())
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        user.getRoles().add(customerRole);
+
+        return userRepository.save(user);
+    }
+
+    private void updateUserProfileFromOAuth(
+            User user,
+            OAuth2UserInfo userInfo
+    ) {
+
+        if (user.getFullName() == null || user.getFullName().isBlank()) {
+            user.setFullName(userInfo.name());
+        }
+
+        if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
+            user.setAvatarUrl(userInfo.avatarUrl());
+        }
+    }
+
+    private void validateOAuth2UserInfo(
+            OAuth2UserInfo userInfo
+    ) {
+
+        if (userInfo.providerUserId() == null
+                || userInfo.providerUserId().isBlank()) {
+            throw new RuntimeException(
+                    "OAuth2 provider user id is missing"
+            );
+        }
+
+        if (userInfo.email() == null
+                || userInfo.email().isBlank()) {
+            throw new RuntimeException(
+                    "OAuth2 provider email is missing"
+            );
+        }
+
+        if (userInfo.provider()
+                == com.example.salonflow.entity.enums.OAuthProvider.GOOGLE
+                && !Boolean.TRUE.equals(userInfo.emailVerified())) {
+            throw new RuntimeException(
+                    "Google email is not verified"
+            );
+        }
+    }
+
+    private String generateUniqueUsername(
+            OAuth2UserInfo userInfo
+    ) {
+
+        String emailPrefix =
+                userInfo.email().split("@")[0]
+                        .replaceAll("[^A-Za-z0-9_]", "_");
+
+        String baseUsername =
+                emailPrefix.isBlank()
+                        ? userInfo.provider().name().toLowerCase()
+                        : emailPrefix;
+
+        String username = baseUsername;
+        int suffix = 1;
+
+        while (userRepository.existsByUsername(username)) {
+            username = baseUsername + "_" + suffix;
+            suffix++;
+        }
+
+        return username;
     }
 
     private AuthResponse buildAuthResponse(

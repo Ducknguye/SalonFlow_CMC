@@ -4,6 +4,7 @@ import com.example.salonflow.dto.auth.*;
 import jakarta.validation.Valid;
 import com.example.salonflow.services.service.AuthenticationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -54,5 +55,19 @@ public class AuthController {
         authenticationService.logout(userId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/oauth2/{provider}")
+    public ResponseEntity<Void> loginWithOAuth2(
+            @PathVariable String provider
+    ) {
+
+        return ResponseEntity
+                .status(HttpStatus.FOUND)
+                .header(
+                        "Location",
+                        "/oauth2/authorization/" + provider
+                )
+                .build();
     }
 }
