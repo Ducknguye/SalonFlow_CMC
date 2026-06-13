@@ -72,22 +72,19 @@ public class EmailServiceImpl
         send(body);
     }
 
-    private void send(
-            Map<String,Object> body
-    ) {
+    private void send(Map<String, Object> body) {
 
-        webClient.post()
-                .uri("/emails")
-                .header(
-                        HttpHeaders.AUTHORIZATION,
-                        "Bearer " + apiKey
-                )
-                .contentType(
-                        MediaType.APPLICATION_JSON
-                )
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+    if (apiKey == null || apiKey.isBlank()) {
+        throw new RuntimeException("Resend API key is missing");
     }
+
+    webClient.post()
+            .uri("/emails")
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(body)
+            .retrieve()
+            .bodyToMono(String.class)
+            .block();
+}
 }

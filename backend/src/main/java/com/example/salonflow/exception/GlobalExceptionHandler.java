@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    @ExceptionHandler(RuntimeException.class)
+    // @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(
             RuntimeException ex
     ) {
@@ -96,4 +96,31 @@ public class GlobalExceptionHandler {
 
         return body;
     }
+
+        @ExceptionHandler({
+                ResourceNotFoundException.class,
+                InvalidTokenException.class,
+                BusinessException.class
+        })
+        public ResponseEntity<Map<String, Object>> handleCustomException(
+                RuntimeException ex
+        ) {
+
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+
+        if (ex instanceof ResourceNotFoundException) {
+                status = HttpStatus.NOT_FOUND;
+        }
+
+        if (ex instanceof InvalidTokenException) {
+                status = HttpStatus.UNAUTHORIZED;
+        }
+
+        return ResponseEntity.status(status)
+                .body(errorBody(
+                        status,
+                        ex.getMessage(),
+                        null
+                ));
+        }
 }
