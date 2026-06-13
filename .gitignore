@@ -1,3 +1,4 @@
 # dotenv environment files
 .env
 .env.*
+nestjs-demo/node_modules/

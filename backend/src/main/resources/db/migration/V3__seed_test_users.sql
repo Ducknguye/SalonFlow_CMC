@@ -2,7 +2,10 @@ INSERT INTO users(
     username,
     email,
     password_hash,
-    full_name
+    full_name,
+    status,
+    created_at,
+    updated_at
 )
 VALUES
 
@@ -10,7 +13,10 @@ VALUES
 'superadmin',
 'superadmin@test.com',
 '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
-'Super Admin'
+'Super Admin',
+'ACTIVE',
+CURRENT_TIMESTAMP,
+CURRENT_TIMESTAMP
 );
 
 INSERT INTO user_roles(user_id, role_id)

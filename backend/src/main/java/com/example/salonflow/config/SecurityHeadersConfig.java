@@ -1,38 +1,50 @@
 package com.example.salonflow.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Security Headers Configuration
+ * Helmet.js-like Security Headers Configuration
  * 
- * Cấu hình các HTTP headers bảo mật bổ sung để tăng cường CSRF protection:
- * - X-Content-Type-Options: Ngăn chặn MIME-type sniffing
- * - X-Frame-Options: Ngăn chặn Clickjacking
- * - X-XSS-Protection: Kích hoạt XSS protection
- * - Strict-Transport-Security: Yêu cầu HTTPS
- * - Content-Security-Policy: Hạn chế nguồn tài nguyên
+ * Cấu hình HTTP security headers tương tự Helmet.js middleware
+ * Bảo vệ ứng dụng khỏi các tấn công phổ biến như:
+ * - MIME-type sniffing
+ * - Clickjacking
+ * - XSS (Cross-Site Scripting)
+ * - CSRF (Cross-Site Request Forgery)
+ * - Spectre/Meltdown attacks
  */
 @Configuration
 public class SecurityHeadersConfig {
 
     /**
-     * Cấu hình response headers
-     * 
-     * Lưu ý: Trong production environment, hãy kích hoạt điều này
-     * bằng cách uncomment trong application.properties:
-     * server.servlet.session.cookie.secure=true
-     * server.servlet.session.cookie.http-only=true
-     * server.servlet.session.cookie.same-site=strict
+     * Environment: development hoặc production
+     * Được đọc từ application.properties: app.environment
+     */
+    @Value("${app.environment:development}")
+    private String environment;
+
+    /**
+     * Cấu hình interceptor để thêm security headers
      */
     @Bean
     public WebMvcConfigurer securityHeadersConfigurer() {
         return new WebMvcConfigurer() {
             @Override
-            public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
-                registry.addInterceptor(new SecurityHeadersInterceptor());
+            public void addInterceptors(InterceptorRegistry registry) {
+                SecurityHeadersInterceptor interceptor = new SecurityHeadersInterceptor(environment);
+                registry.addInterceptor(interceptor)
+                    .addPathPatterns("/**")
+                    .excludePathPatterns(
+                        "/static/**",
+                        "/public/**",
+                        "/assets/**"
+                    );
             }
         };
     }
 }
+

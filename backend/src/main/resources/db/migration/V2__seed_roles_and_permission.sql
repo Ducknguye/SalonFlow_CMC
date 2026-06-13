@@ -1,23 +1,23 @@
-INSERT INTO roles(name, description)
+INSERT INTO roles(name, description, created_at)
 VALUES
-('SUPER_ADMIN', 'System Administrator'),
-('SALON_OWNER', 'Salon Owner'),
-('STAFF', 'Salon Staff'),
-('CUSTOMER', 'Customer');
+('SUPER_ADMIN', 'System Administrator', CURRENT_TIMESTAMP),
+('SALON_OWNER', 'Salon Owner', CURRENT_TIMESTAMP),
+('STAFF', 'Salon Staff', CURRENT_TIMESTAMP),
+('CUSTOMER', 'Customer', CURRENT_TIMESTAMP);
 
-INSERT INTO permissions(code, description)
+INSERT INTO permissions(code, description, created_at)
 VALUES
 
 -- USER
-('user:create', 'Create user'),
-('user:view', 'View user'),
-('user:update', 'Update user'),
-('user:delete', 'Delete user'),
+('user:create', 'Create user', CURRENT_TIMESTAMP),
+('user:view', 'View user', CURRENT_TIMESTAMP),
+('user:update', 'Update user', CURRENT_TIMESTAMP),
+('user:delete', 'Delete user', CURRENT_TIMESTAMP),
 
 -- SALON
-('salon:create', 'Create salon'),
-('salon:view', 'View salon'),
-('salon:update', 'Update salon');
+('salon:create', 'Create salon', CURRENT_TIMESTAMP),
+('salon:view', 'View salon', CURRENT_TIMESTAMP),
+('salon:update', 'Update salon', CURRENT_TIMESTAMP);
 
 INSERT INTO role_permissions(role_id, permission_id)
 SELECT
